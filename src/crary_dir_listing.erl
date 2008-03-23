@@ -53,7 +53,7 @@
 %% @doc Handle the request as any good dir lister would.
 %% @spec handler(crary:crary_req(), string()) -> void()
 handler(#crary_req{method = "GET"} = Req, BaseDir) ->
-    try file_path(Req, BaseDir) of
+    case file_path(Req, BaseDir) of
         Path ->
             case file:read_file_info(Path) of
                 {ok, #file_info{type = directory}} ->
@@ -62,12 +62,11 @@ handler(#crary_req{method = "GET"} = Req, BaseDir) ->
                     write_file(Req, Path);
                 {error, enoent} ->
                     crary:not_found(Req);
+                {error, enotdir} ->
+                    crary:not_found(Req);
                 {error, eacces} ->
                     crary:forbidden(Req)
             end
-    catch
-        {invalid_path, _Path} ->
-            crary:not_found(Req)
     end;
 handler(Req, _BaseDir) ->
     crary:not_implemented(Req).
@@ -217,15 +216,16 @@ has_index_file([Name | Names], Path) ->
     end.
 
 %% @doc Create a file path by appending the Uri to Base (making sure
-%% that Uri doesn't try to escape from Base by using `..' or such.
+%% that Uri doesn't try to escape from Base by using `..' or such)
 %% @spec file_path(crary:crary_req(), string()) -> string()
+%% @throws not_found
 file_path(#crary_req{uri = #uri{path = Uri}}, Base) ->
     Parts = lists:foldl(
               fun (Part, Acc) ->
                       case Part of
                           ".." ->
                               case Acc of
-                                  [] -> throw(invalid_path);
+                                  [] -> throw(not_found);
                                   _ -> tl(Acc)
                               end;
                           "."  -> Acc;
@@ -257,9 +257,9 @@ file_path_test() ->
     ?assertMatch("/a/b/c/d2", file_path("/a/b/c/", "d/../d2")),
     ?assertMatch("/a/b/../c/d", file_path("/a/b/../c/", "d")),
     ?assertMatch("/a/b/c", file_path("/a/b/c/", "")),
-    ?assertThrow(invalid_path, file_path("/a/b/c/", "d/../..")),
-    ?assertThrow(invalid_path, file_path("/a/b/c/", "../..")),
-    ?assertThrow(invalid_path, file_path("/a/b/c/", "..")),
+    ?assertThrow(not_found, file_path("/a/b/c/", "d/../..")),
+    ?assertThrow(not_found, file_path("/a/b/c/", "../..")),
+    ?assertThrow(not_found, file_path("/a/b/c/", "..")),
     ?assertMatch("/a/b/c/d", file_path("/a/b/c/", "/./d")).
 
 extension(Path) ->
