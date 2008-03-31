@@ -219,7 +219,16 @@ has_index_file([Name | Names], Path) ->
 %% that Uri doesn't try to escape from Base by using `..' or such)
 %% @spec file_path(crary:crary_req(), string()) -> string()
 %% @throws not_found
-file_path(#crary_req{uri = #uri{path = Uri}}, Base) ->
+file_path(#crary_req{uri = Uri}, Base) ->
+    file_path(Uri, Base);
+file_path(#uri{path = UriPath, frag = ""}, Base) ->
+    file_path_(UriPath, Base);
+file_path(#uri{}, _Base) ->
+    throw(bad_request);
+file_path(Uri, Base) when is_list(Uri) ->
+    file_path(uri:from_string(Uri), Base).
+
+file_path_(UriPath, Base)->
     Parts = lists:foldl(
               fun (Part, Acc) ->
                       case Part of
@@ -231,7 +240,7 @@ file_path(#crary_req{uri = #uri{path = Uri}}, Base) ->
                           "."  -> Acc;
                           _    -> [Part | Acc]
                       end
-              end, [], string:tokens(Uri, "/")),
+              end, [], string:tokens(UriPath, "/")),
     SBase = strip_slash(Base),
     case Parts of
         [] ->
@@ -326,3 +335,4 @@ ext_mime_type(".bz2") -> <<"application/x-bzip">>;
 ext_mime_type(".tbz") -> <<"application/x-bzip-compressed-tar">>;
 ext_mime_type(".tar.bz2") -> <<"application/x-bzip-compressed-tar">>;
 ext_mime_type(_) -> <<"application/octet-stream">>.
+
